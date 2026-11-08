@@ -1,0 +1,14 @@
+/* Versioned, validated, device-only storage. No network access. */
+(function(root){'use strict';const KEY='blazes-beasts-v1';const SKINS=['#efc3a6','#d9a078','#9c664c','#633f38'],HAIRS=['#a34e2d','#332642','#e3c888','#637d88'],EYES=['#468260','#527db6','#9a6744','#b179b0'],OUTFITS=['#e37cac','#77ced2','#f0bc67','#aa9ce1'];
+const fresh=()=>({version:1,settings:{muted:false},avatar:null,team:[],campaign:{stage:1,attempts:3,hearts:0,score:0,complete:false,inFlight:false},scores:[]});
+function clean(raw){if(!raw||raw.version!==1)return fresh();const d=fresh(),a=raw.avatar;d.settings.muted=raw.settings?.muted===true;if(a&&typeof a.name==='string')d.avatar={name:a.name.replace(/[<>\x00-\x1f]/g,'').trim().slice(0,18)||'Challenger',skin:SKINS.includes(a.skin)?a.skin:SKINS[0],hair:HAIRS.includes(a.hair)?a.hair:HAIRS[0],eyes:EYES.includes(a.eyes)?a.eyes:EYES[0],outfit:OUTFITS.includes(a.outfit)?a.outfit:OUTFITS[0],ears:!!a.ears,tail:!!a.tail};d.team=Array.isArray(raw.team)?[...new Set(raw.team.filter(n=>Number.isInteger(n)&&n>=0&&n<6))].slice(0,3):[];
+ const c=raw.campaign||{};const integer=(v,min,max,def)=>Number.isInteger(v)&&v>=min&&v<=max?v:def;d.campaign={stage:integer(c.stage,1,10,1),attempts:integer(c.attempts,0,3,3),hearts:integer(c.hearts,0,10,0),score:integer(c.score,0,9999999,0),complete:c.complete===true,inFlight:c.inFlight===true};if(d.campaign.complete&&d.campaign.hearts!==10)d.campaign.complete=false;
+ d.scores=Array.isArray(raw.scores)?raw.scores.filter(s=>s&&typeof s.name==='string'&&Number.isInteger(s.score)&&s.score>=0&&s.score<=9999999).map(s=>({name:s.name.replace(/[<>\x00-\x1f]/g,'').slice(0,18),score:s.score,stages:integer(s.stages,0,10,0)})).sort((a,b)=>b.score-a.score).slice(0,5):[];return d;}
+function load(storage){try{return {data:clean(JSON.parse(storage.getItem(KEY))),ok:true};}catch{return {data:fresh(),ok:false};}}
+function save(storage,data){try{storage.setItem(KEY,JSON.stringify(clean(data)));return true;}catch{return false;}}
+function win(data,bonus){const c=data.campaign;if(c.complete)return false;c.inFlight=false;c.hearts=Math.min(10,c.hearts+1);c.score+=Math.max(0,Math.floor(bonus));if(c.stage===10){c.complete=true;record(data);}else c.stage++;c.attempts=3;return true;}
+function lose(data){const c=data.campaign;c.attempts=Math.max(0,c.attempts-1);if(c.attempts===0)record(data);return c.attempts;}
+function recover(data){if(!data.campaign.inFlight)return false;data.campaign.inFlight=false;if(data.campaign.attempts===0&&!data.campaign.complete)record(data);return true;}
+function record(d){d.scores.push({name:d.avatar?.name||'Challenger',score:d.campaign.score,stages:d.campaign.hearts});d.scores.sort((a,b)=>b.score-a.score);d.scores=d.scores.slice(0,5);}
+const api={KEY,SKINS,HAIRS,EYES,OUTFITS,fresh,clean,load,save,win,lose,record,recover};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.BeastSave=api;
+})(typeof window!=='undefined'?window:globalThis);
